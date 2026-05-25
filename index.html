@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#121213">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Roskilde Wordle 🎪</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
+  body {
+    background: #121213;
+    color: #eee;
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 0.5rem 0.5rem max(0.5rem, env(safe-area-inset-bottom));
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+  }
+  h1 { font-size: 1.5rem; font-weight: 800; margin: 0.4rem 0 0.15rem; text-align: center; letter-spacing: 0.5px; }
+  h1 span { color: #f64740; }
+  .sub { color: #888; font-size: 0.78rem; margin-bottom: 0.4rem; text-align: center; }
+  .stats { display: flex; gap: 1.1rem; font-size: 0.72rem; color: #aaa; margin-bottom: 0.5rem; }
+  .stats strong { color: #fff; font-size: 0.82rem; }
+
+  /* Board: fluid width, tile size driven by --tile-size CSS variable */
+  #board {
+    display: flex; flex-direction: column;
+    gap: var(--row-gap, 4px);
+    margin-bottom: 0.6rem;
+    width: 100%;
+    max-width: var(--board-width, 360px);
+    align-items: center;
+  }
+  .row {
+    display: flex;
+    gap: var(--tile-gap, 4px);
+    justify-content: center;
+    width: 100%;
+  }
+  .tile {
+    width: var(--tile-size, 50px);
+    height: var(--tile-size, 50px);
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: calc(var(--tile-size, 50px) * 0.45);
+    font-weight: 700; text-transform: uppercase;
+    border: 2px solid #3a3a3c; border-radius: 3px;
+    transition: background 0.25s, transform 0.1s;
+    line-height: 1;
+  }
+  .tile.filled { border-color: #565758; animation: pop 0.12s ease; }
+  .tile.green { background: #538d4e; border-color: #538d4e; }
+  .tile.yellow { background: #b59f3b; border-color: #b59f3b; }
+  .tile.gray { background: #3a3a3c; border-color: #3a3a3c; }
+  .tile.space-tile {
+    border: 2px solid transparent; background: transparent;
+    width: calc(var(--tile-size, 50px) * 0.35);
+    min-width: 10px;
+  }
+  .tile.sym-tile {
+    border: 2px solid transparent; background: transparent;
+    font-size: calc(var(--tile-size, 50px) * 0.4);
+    color: #888;
+  }
+  .tile.flip { animation: flip 0.3s ease forwards; }
+  @keyframes pop { 0% { transform: scale(1); } 50% { transform: scale(1.12); } 100% { transform: scale(1); } }
+  @keyframes flip {
+    0% { transform: rotateX(0); }
+    50% { transform: rotateX(-90deg); }
+    100% { transform: rotateX(0); }
+  }
+
+  /* Keyboard */
+  .keyboard {
+    width: 100%;
+    max-width: 520px;
+    margin-bottom: 0.4rem;
+    padding: 0 2px;
+  }
+  .kb-row {
+    display: flex;
+    gap: var(--key-gap, 5px);
+    justify-content: center;
+    margin-bottom: var(--key-gap, 5px);
+  }
+  .key {
+    height: var(--key-height, 52px);
+    border: none; border-radius: 5px;
+    font-size: 0.85rem; font-weight: 700; cursor: pointer;
+    background: #818384; color: #fff; text-transform: uppercase;
+    flex: 1 1 0; min-width: 0; padding: 0 2px;
+    transition: background 0.15s, transform 0.08s;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    font-family: inherit;
+  }
+  .key:active, .key.pressed {
+    transform: scale(0.94);
+    background: #6a6b6d;
+  }
+  .key.wide {
+    flex: 1.6 1 0;
+    font-size: 0.7rem;
+  }
+  .key.special { background: #666; }
+  .key.special:active, .key.special.pressed { background: #555; }
+  .key.green { background: #538d4e; }
+  .key.green:active { background: #46784a; }
+  .key.yellow { background: #b59f3b; }
+  .key.yellow:active { background: #998533; }
+  .key.gray { background: #3a3a3c; }
+  .key.gray:active { background: #2a2a2c; }
+
+  .msg {
+    min-height: 28px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.85rem; font-weight: 700; text-align: center;
+    padding: 0 1rem;
+  }
+
+  /* Overlay */
+  .overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.85); z-index: 100;
+    justify-content: center; align-items: center;
+    padding: 1rem;
+  }
+  .overlay.show { display: flex; }
+  .modal {
+    background: #1a1a1a; border: 1px solid #333; border-radius: 12px;
+    padding: 1.5rem; text-align: center; max-width: 380px; width: 100%;
+  }
+  .modal h2 { font-size: 1.4rem; margin-bottom: 0.5rem; }
+  .modal .an { font-size: 1.4rem; font-weight: 900; margin-bottom: 1rem; color: #f64740; word-break: break-word; }
+  .modal button {
+    background: #538d4e; color: #fff; border: none; border-radius: 6px;
+    padding: 0.7rem 1.4rem; font-size: 1rem; font-weight: 700;
+    cursor: pointer; margin: 0.3rem; transition: background 0.15s, transform 0.08s;
+    touch-action: manipulation; font-family: inherit;
+  }
+  .modal button:active { transform: scale(0.96); }
+  .modal button:hover { background: #66a358; }
+  .modal button.secondary { background: #666; }
+  .modal button.secondary:hover { background: #888; }
+  .note { color: #888; font-size: 0.82rem; margin-top: 1rem; }
+
+  /* Mobile-specific tweaks */
+  @media (max-width: 480px) {
+    body { padding: 0.4rem 0.4rem max(0.4rem, env(safe-area-inset-bottom)); }
+    h1 { font-size: 1.25rem; margin: 0.3rem 0 0.1rem; }
+    .sub { font-size: 0.72rem; margin-bottom: 0.3rem; }
+    .stats { gap: 0.9rem; font-size: 0.68rem; margin-bottom: 0.4rem; }
+    .stats strong { font-size: 0.78rem; }
+    #board { --row-gap: 3px; --tile-gap: 3px; margin-bottom: 0.4rem; }
+    .keyboard { --key-gap: 4px; --key-height: 46px; }
+    .key { font-size: 0.8rem; border-radius: 4px; }
+    .key.wide { font-size: 0.62rem; }
+    .msg { min-height: 24px; font-size: 0.8rem; }
+  }
+  @media (max-width: 360px) {
+    .keyboard { --key-gap: 3px; --key-height: 42px; padding: 0 1px; }
+    .key { font-size: 0.72rem; }
+    .key.wide { font-size: 0.55rem; }
+    .stats { gap: 0.6rem; }
+  }
+  /* Short-height phones: tighten vertical spacing */
+  @media (max-height: 700px) {
+    h1 { font-size: 1.1rem; margin: 0.2rem 0 0.05rem; }
+    .sub { font-size: 0.68rem; margin-bottom: 0.2rem; }
+    .stats { margin-bottom: 0.3rem; }
+    #board { margin-bottom: 0.3rem; }
+    .msg { min-height: 18px; }
+    .keyboard { --key-height: 42px; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Roskilde <span>Wordle</span> 🎪</h1>
+<div class="sub">Roskilde Festival 2025 · 177 artists</div>
+<div class="stats">
+  <span>Won: <strong id="wins">0</strong></span>
+  <span>Lost: <strong id="losses">0</strong></span>
+  <span>Streak: <strong id="streak">0</strong></span>
+</div>
+<div id="board"></div>
+<div class="msg" id="msg">&nbsp;</div>
+<div class="keyboard" id="keyboard"></div>
+
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <h2 id="resultTitle">🎉 You Win!</h2>
+    <div class="an" id="resultArtist"></div>
+    <div>
+      <button id="playAgainBtn">Play Again</button>
+      <button id="newArtistBtn" class="secondary">New Artist</button>
+    </div>
+    <div class="note" id="noLettersNote"></div>
+  </div>
+</div>
+
+<script>
+// ─── Artist list ──────────────────────────────────────────────
+const ARTISTS = [
+  "Gorillaz","Jennie","The Cure","Zara Larsson","Addison Rae","Aphaca","Bad Gyal","Clipse",
+  "David Byrne","EsDeeKid","Ethel Cain","Ken Carson","Kneecap","Lily Allen","Little Simz",
+  "Tessa","Tobias Rahim","TV-2","Wolf Alice","Yung Lean & Bladee","Audrey Nuna","BB Trickz",
+  "BIA","Brutalismus 3000","Cobrah","DBN Gogo","Guldimund","Igorrr","Jade","JALEN NGONDA",
+  "Jane Remover","Jim Legxacy","Kettama","KWN","Liniker","Lojay","Los Mirlos","Los Thuthanaka",
+  "Lykke Li","Malk De Koijn","Marwan Moussa","MAS","Mille","Napalm Death","Oklou","Pa Salieu",
+  "PANDA BEAR & SONIC BOOM","Pil","Rizwan-Muazzam Qawwali","Rochelle Jordan","Royel Otis",
+  "Sama' Abdulhadi","Sammy Virji","Sierra Ferrell","Smerz","The Savage Rose",
+  "Uncle Acid & The Deadbeats","YOUNG MIKO","¥ØU$UK€ ¥UK1MAT$U","Zar Paulo","1111",
+  "Abdullah Miniawy Trio","Adrian Quesada","Albertslund Terror Korps","ANGÅENDE MIG",
+  "Annie & the Caldwells","Ata Kak","AySay","BLAWAN","Bruno Berle","Cat Clyde","Chezile",
+  "Cortisa Star","CRRDR","CUIRASS","Dean Johnson","Djrum","Dying Wish","Ecca Vandal",
+  "EEE GEE","Ela Lung","Folk Bitch Trio","Frost Children","Getdown Services","Gwenifer Raymond",
+  "HEINALI & ANDRIANA-YAROSLAVA SAIENKO","Hemlocke Springs","Honningbarna","Hypnosis Therapy",
+  "Iglooghost","Indus","Jorjiana","Joshua Idehen","Khana Bierbood","Kin'Gongolo Kiniata",
+  "Krøyer","Lamisi","LECHUGA ZAFIRO & VERRACO","Lord Snow","Luisa Almaguer","Madra Salach",
+  "Mark William Lewis","Maruja","Milkweed","Naïka","Nick León","No Joy","Nourished By Time",
+  "PILI PILI GIRLS","POISON RUÏN","Primitive Man","Sara Parkman","Sherelle",
+  "Shovel Dance Collective","ŠIROM","SMAG PÅ DIG SELV","Smertegrænsens Toldere","Snuggle",
+  "SOLI CITY x VERTIGO","Sorry","SUSOBRINO","Saad Tiouly","TARRAK","The Callous Daoboys",
+  "The New Eves","The Sophs","The Zawose Queens","Tonser","Truck Violence","Tuvaband","Uld",
+  "Vanessa Amara","Vgtbl.pl","Vilde Tuv","Wicky","Yerai Cortés","100%Wet","A Good Year",
+  "ALAWARI","Alice Ai","Ana Juél","Augusta Schackinger","Berg","Carlina de Place","Club Live",
+  "Demersal","Diket","Dork","Døtre","Eros For You","Fauna","GB","Glayden","Grande Mahogany",
+  "Ida Duelund","Karoline Mousing","Kayak","Kōya","Mami Umami","Masiv","Miaw","Michael Williams",
+  "Morild","Muskila + Simona Abdallah","Oskar Witt","Ozzy","Pistol Pistol Pistol","Ponny",
+  "Portal Pets","Pumpegris","Sa_G","Salver","SCAM","Smøgmænd","Spawner","Will","Zuloo"
+];
+
+// ─── Game state ───────────────────────────────────────────────
+let target = "";
+let currentGuess = "";
+let currentRow = 0;
+let gameOver = false;
+let wins = 0;
+let losses = 0;
+let streak = 0;
+let currentArtistIdx = -1;
+const MAX_GUESSES = 6;
+let slots = [];
+let grid = [];
+
+// ─── Keyboard layout ─────────────────────────────────────────
+const ROWS = [
+  ["q","w","e","r","t","y","u","i","o","p","å"],
+  ["a","s","d","f","g","h","j","k","l","ø","æ"],
+  ["enter","z","x","c","v","b","n","m","backspace"]
+];
+
+let keyStates = {};
+
+// ─── Helpers ─────────────────────────────────────────────────
+function stripDiacritics(s) {
+  return s.normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+function isLetter(ch) {
+  return /^[a-zA-ZæøåÆØÅ]$/.test(ch);
+}
+
+function prepareSlots(name) {
+  const result = [];
+  for (const ch of name) {
+    if (ch === ' ' || ch === ' ') {
+      result.push({ char: ch, isGuessable: false, upper: '', elementType: 'space' });
+    } else if (isLetter(ch)) {
+      result.push({ char: ch, isGuessable: true, upper: stripDiacritics(ch).toUpperCase(), elementType: 'guessable' });
+    } else {
+      const upper = stripDiacritics(ch).toUpperCase();
+      result.push({ char: ch, isGuessable: false, upper: upper === '' ? ch : upper, elementType: 'symbol' });
+    }
+  }
+  return result;
+}
+
+// ─── Dynamic tile sizing ─────────────────────────────────────
+function updateTileSize() {
+  const board = document.getElementById('board');
+  if (!board || slots.length === 0) return;
+
+  const vw = window.innerWidth;
+  const isMobile = vw < 480;
+  const isNarrow = vw < 360;
+
+  // Available width for the board
+  const horizontalPadding = isMobile ? 16 : 24;
+  const desktopMax = 360;
+  const mobileMax = vw - horizontalPadding;
+  const boardWidth = Math.min(mobileMax, isMobile ? mobileMax : desktopMax);
+
+  const gap = isMobile ? 3 : 4;
+
+  // Weighted slot count: space tiles take 0.35 of a normal tile
+  const spaceCount = slots.filter(s => s.elementType === 'space').length;
+  const otherCount = slots.length - spaceCount;
+  const weightedSlots = otherCount + spaceCount * 0.35;
+  const totalGap = (slots.length - 1) * gap;
+
+  let tileSize = (boardWidth - totalGap) / weightedSlots;
+
+  // Caps: max 50px (desktop default), min 20px to keep readable while letting board overflow if absolutely necessary
+  const maxTile = isMobile ? 44 : 50;
+  const minTile = isNarrow ? 18 : 22;
+  tileSize = Math.max(minTile, Math.min(maxTile, Math.floor(tileSize)));
+
+  board.style.setProperty('--tile-size', tileSize + 'px');
+  board.style.setProperty('--board-width', boardWidth + 'px');
+}
+
+// ─── Board rendering ─────────────────────────────────────────
+function renderBoard() {
+  const board = document.getElementById('board');
+  board.innerHTML = '';
+
+  for (let r = 0; r < MAX_GUESSES; r++) {
+    const rowEl = document.createElement('div');
+    rowEl.className = 'row';
+
+    if (r < currentRow) {
+      for (let s = 0; s < slots.length; s++) {
+        rowEl.appendChild(makeSlotTile(slots[s]));
+      }
+      const tiles = rowEl.querySelectorAll('.tile');
+      const guess = grid[r] || [];
+      for (let s = 0; s < slots.length; s++) {
+        if (guess[s]) {
+          tiles[s].textContent = guess[s].char;
+          tiles[s].classList.add(guess[s].color);
+        }
+      }
+    } else if (r === currentRow) {
+      let letterIdx = 0;
+      for (let s = 0; s < slots.length; s++) {
+        const tile = document.createElement('div');
+        tile.className = 'tile';
+        const sl = slots[s];
+        if (sl.elementType === 'space') {
+          tile.classList.add('space-tile');
+        } else if (sl.elementType === 'symbol') {
+          tile.classList.add('sym-tile');
+          tile.textContent = sl.char;
+        } else {
+          if (currentGuess[letterIdx]) {
+            tile.textContent = currentGuess[letterIdx];
+            tile.classList.add('filled');
+          }
+          letterIdx++;
+        }
+        rowEl.appendChild(tile);
+      }
+    } else {
+      for (let s = 0; s < slots.length; s++) {
+        const tile = document.createElement('div');
+        tile.className = 'tile';
+        const sl = slots[s];
+        if (sl.elementType === 'space') {
+          tile.classList.add('space-tile');
+        } else if (sl.elementType === 'symbol') {
+          tile.classList.add('sym-tile');
+          tile.textContent = sl.char;
+        }
+        rowEl.appendChild(tile);
+      }
+    }
+    board.appendChild(rowEl);
+  }
+  updateTileSize();
+}
+
+function makeSlotTile(sl) {
+  const tile = document.createElement('div');
+  tile.className = 'tile';
+  if (sl.elementType === 'space') {
+    tile.classList.add('space-tile');
+  } else if (sl.elementType === 'symbol') {
+    tile.classList.add('sym-tile');
+    tile.textContent = sl.char;
+  }
+  return tile;
+}
+
+function getGuessableIndices() {
+  const indices = [];
+  for (let s = 0; s < slots.length; s++) {
+    if (slots[s].elementType === 'guessable') indices.push(s);
+  }
+  return indices;
+}
+
+// ─── Guess evaluation ────────────────────────────────────────
+function evaluateGuess() {
+  const indices = getGuessableIndices();
+  const guessStr = currentGuess.toUpperCase();
+  if (guessStr.length !== indices.length) return null;
+
+  const targetLetters = indices.map(i => slots[i].upper);
+  const result = new Array(slots.length).fill(null);
+  const remaining = [...targetLetters];
+  const guessArr = guessStr.split('');
+
+  for (let j = 0; j < indices.length; j++) {
+    const si = indices[j];
+    if (guessArr[j] === remaining[j]) {
+      result[si] = { char: guessArr[j], color: 'green' };
+      remaining[j] = null;
+      guessArr[j] = null;
+    }
+  }
+  for (let j = 0; j < indices.length; j++) {
+    if (guessArr[j] === null) continue;
+    const si = indices[j];
+    const idx = remaining.indexOf(guessArr[j]);
+    if (idx !== -1) {
+      result[si] = { char: guessArr[j], color: 'yellow' };
+      remaining[idx] = null;
+    } else {
+      result[si] = { char: guessArr[j], color: 'gray' };
+    }
+  }
+
+  return result;
+}
+
+// ─── Submit ──────────────────────────────────────────────────
+function submitGuess() {
+  if (gameOver) return;
+  const indices = getGuessableIndices();
+  if (currentGuess.length !== indices.length) return;
+
+  const result = evaluateGuess();
+  if (!result) return;
+
+  grid[currentRow] = result;
+  const won = indices.every(si => result[si] && result[si].color === 'green');
+
+  for (let s = 0; s < slots.length; s++) {
+    if (result[s]) updateKeyState(result[s].char, result[s].color);
+  }
+
+  animateRow(currentRow, result);
+
+  if (won) {
+    gameOver = true;
+    wins++;
+    streak++;
+    saveStats();
+    updateStats();
+    setTimeout(() => showOverlay(true), indices.length * 80 + 500);
+  } else {
+    currentRow++;
+    currentGuess = '';
+    if (currentRow >= MAX_GUESSES) {
+      gameOver = true;
+      losses++;
+      streak = 0;
+      saveStats();
+      updateStats();
+      setTimeout(() => showOverlay(false), 500);
+    }
+    renderBoard();
+  }
+  document.getElementById('msg').innerHTML = '&nbsp;';
+}
+
+function animateRow(rowIdx, result) {
+  const board = document.getElementById('board');
+  const rows = board.querySelectorAll('.row');
+  const rowEl = rows[rowIdx];
+  if (!rowEl) return;
+  const tiles = rowEl.querySelectorAll('.tile');
+
+  for (let s = 0; s < slots.length; s++) {
+    if (result[s]) {
+      setTimeout(() => {
+        tiles[s].textContent = result[s].char;
+        tiles[s].classList.add(result[s].color, 'flip');
+      }, s * 80);
+    }
+  }
+}
+
+// ─── Keyboard ────────────────────────────────────────────────
+function initKeyboard() {
+  const kb = document.getElementById('keyboard');
+  kb.innerHTML = '';
+  for (const row of ROWS) {
+    const rowEl = document.createElement('div');
+    rowEl.className = 'kb-row';
+    for (const key of row) {
+      const btn = document.createElement('button');
+      btn.className = 'key';
+      if (key === 'enter' || key === 'backspace') {
+        btn.classList.add('wide', 'special');
+      }
+      btn.dataset.key = key;
+      btn.textContent = key === 'enter' ? 'ENTER' : key === 'backspace' ? '⌫' : key;
+      btn.setAttribute('aria-label',
+        key === 'enter' ? 'Enter' : key === 'backspace' ? 'Backspace' : key.toUpperCase());
+      // Use pointerdown for faster touch response, but fall back to click
+      let pressed = false;
+      btn.addEventListener('pointerdown', (e) => {
+        pressed = true;
+        btn.classList.add('pressed');
+      });
+      btn.addEventListener('pointerup', () => {
+        if (pressed) {
+          btn.classList.remove('pressed');
+          handleKey(key);
+          pressed = false;
+        }
+      });
+      btn.addEventListener('pointerleave', () => {
+        btn.classList.remove('pressed');
+        pressed = false;
+      });
+      btn.addEventListener('pointercancel', () => {
+        btn.classList.remove('pressed');
+        pressed = false;
+      });
+      // Prevent native context menu on long-press
+      btn.addEventListener('contextmenu', (e) => e.preventDefault());
+      rowEl.appendChild(btn);
+    }
+    kb.appendChild(rowEl);
+  }
+}
+
+function updateKeyState(ch, color) {
+  const priority = { 'green': 3, 'yellow': 2, 'gray': 1, 'used': 0 };
+  const current = keyStates[ch];
+  if (!current || (priority[color] || 0) > (priority[current] || 0)) {
+    keyStates[ch] = color;
+  }
+  renderKeyboard();
+}
+
+function renderKeyboard() {
+  const kb = document.getElementById('keyboard');
+  const btns = kb.querySelectorAll('.key');
+  for (const btn of btns) {
+    const key = btn.dataset.key;
+    btn.className = 'key';
+    if (key === 'enter' || key === 'backspace') btn.classList.add('wide', 'special');
+    const state = keyStates[key];
+    if (state) btn.classList.add(state);
+  }
+}
+
+// ─── Input handling ──────────────────────────────────────────
+function handleKey(ch) {
+  if (gameOver) return;
+  const indices = getGuessableIndices();
+  if (ch === 'enter') { submitGuess(); return; }
+  if (ch === 'backspace') { currentGuess = currentGuess.slice(0, -1); renderBoard(); return; }
+  if (currentGuess.length < indices.length) {
+    currentGuess += ch.toUpperCase();
+    renderBoard();
+  }
+}
+
+// ─── Overlay ─────────────────────────────────────────────────
+function showOverlay(won) {
+  document.getElementById('overlay').classList.add('show');
+  document.getElementById('resultTitle').textContent = won ? '🎉 You Win!' : '😔 You Lost';
+  document.getElementById('resultTitle').style.color = won ? '#538d4e' : '#f64740';
+  document.getElementById('resultArtist').textContent = target;
+
+  const hasGuessable = slots.some(s => s.elementType === 'guessable');
+  document.getElementById('noLettersNote').textContent = hasGuessable ? '' : 'No letters to guess — all tiles auto-revealed!';
+}
+
+function hideOverlay() {
+  document.getElementById('overlay').classList.remove('show');
+}
+
+// ─── Stats ───────────────────────────────────────────────────
+function saveStats() {
+  try {
+    localStorage.setItem('r_w', wins);
+    localStorage.setItem('r_l', losses);
+    localStorage.setItem('r_s', streak);
+  } catch (e) { /* private mode etc */ }
+}
+function loadStats() {
+  try {
+    wins = parseInt(localStorage.getItem('r_w')) || 0;
+    losses = parseInt(localStorage.getItem('r_l')) || 0;
+    streak = parseInt(localStorage.getItem('r_s')) || 0;
+  } catch (e) { /* ignore */ }
+}
+function updateStats() {
+  document.getElementById('wins').textContent = wins;
+  document.getElementById('losses').textContent = losses;
+  document.getElementById('streak').textContent = streak;
+}
+
+// ─── New game ────────────────────────────────────────────────
+function newGame(sameArtist) {
+  hideOverlay();
+  gameOver = false;
+  currentGuess = '';
+  currentRow = 0;
+  grid = [];
+  keyStates = {};
+
+  if (!sameArtist) {
+    currentArtistIdx = Math.floor(Math.random() * ARTISTS.length);
+  } else if (currentArtistIdx === -1) {
+    currentArtistIdx = Math.floor(Math.random() * ARTISTS.length);
+  }
+
+  target = ARTISTS[currentArtistIdx];
+  slots = prepareSlots(target);
+
+  const guessableCount = slots.filter(s => s.elementType === 'guessable').length;
+
+  if (guessableCount === 0) {
+    gameOver = true;
+    wins++;
+    streak++;
+    saveStats();
+    updateStats();
+    renderBoard();
+    document.getElementById('msg').innerHTML = '';
+    showOverlay(true);
+    return;
+  }
+
+  renderBoard();
+  renderKeyboard();
+  updateStats();
+  document.getElementById('msg').innerHTML = '&nbsp;';
+}
+
+// ─── Physical keyboard ───────────────────────────────────────
+document.addEventListener('keydown', (e) => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const k = e.key;
+  if (k === 'Enter') { e.preventDefault(); handleKey('enter'); return; }
+  if (k === 'Backspace') { e.preventDefault(); handleKey('backspace'); return; }
+  const ch = stripDiacritics(k.toLowerCase());
+  if (/^[a-zåæø]$/.test(ch)) {
+    e.preventDefault();
+    handleKey(ch.toUpperCase());
+  }
+});
+
+// ─── Resize handler (debounced) ──────────────────────────────
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(updateTileSize, 80);
+});
+window.addEventListener('orientationchange', () => {
+  setTimeout(updateTileSize, 200);
+});
+
+// ─── Buttons ─────────────────────────────────────────────────
+document.getElementById('playAgainBtn').addEventListener('click', () => newGame(true));
+document.getElementById('newArtistBtn').addEventListener('click', () => newGame(false));
+
+// ─── Init ────────────────────────────────────────────────────
+loadStats();
+initKeyboard();
+newGame(false);
+</script>
+</body>
+</html>
