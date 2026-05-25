@@ -150,6 +150,35 @@
   .modal button.secondary:hover { background: #888; }
   .note { color: #888; font-size: 0.82rem; margin-top: 1rem; }
 
+  /* Schedule & Spotify info bar */
+  #scheduleInfo {
+    min-height: 20px;
+    text-align: center;
+    font-size: 0.78rem;
+    color: #888;
+    margin-bottom: 0.4rem;
+    padding: 0 0.5rem;
+    line-height: 1.4;
+  }
+  #scheduleInfo.show { color: #ccc; }
+  #scheduleInfo .stage-tag { color: #b59f3b; }
+  #scheduleInfo .day-tag { color: #538d4e; }
+  #scheduleInfo .time-tag { color: #aaa; }
+
+  /* Spotify button */
+  .spotify-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: #1DB954 !important; color: #fff !important;
+  }
+  .spotify-btn:active { background: #169c46 !important; transform: scale(0.96); }
+  .spotify-btn .s-icon { font-size: 1.1rem; }
+
+  .schedule-line {
+    color: #aaa; font-size: 0.85rem; margin-bottom: 0.8rem;
+    line-height: 1.5;
+  }
+  .schedule-line .sep { color: #555; margin: 0 4px; }
+
   /* Mobile-specific tweaks */
   @media (max-width: 480px) {
     body { padding: 0.4rem 0.4rem max(0.4rem, env(safe-area-inset-bottom)); }
@@ -189,6 +218,7 @@
   <span>Lost: <strong id="losses">0</strong></span>
   <span>Streak: <strong id="streak">0</strong></span>
 </div>
+<div id="scheduleInfo">Guess the artist to reveal their set info</div>
 <div id="board"></div>
 <div class="msg" id="msg">&nbsp;</div>
 <div class="keyboard" id="keyboard"></div>
@@ -197,6 +227,12 @@
   <div class="modal">
     <h2 id="resultTitle">🎉 You Win!</h2>
     <div class="an" id="resultArtist"></div>
+    <div class="schedule-line" id="scheduleLine"></div>
+    <div style="margin-bottom: 0.8rem;">
+      <a id="spotifyBtn" href="#" target="_blank" rel="noopener" class="spotify-btn" style="display:none; background:#1DB954; color:#fff; border:none; border-radius:6px; padding:0.6rem 1.2rem; font-size:0.95rem; font-weight:700; cursor:pointer; text-decoration:none; touch-action:manipulation;">
+        <span class="s-icon">🎧</span> Listen on Spotify
+      </a>
+    </div>
     <div>
       <button id="playAgainBtn">Play Again</button>
       <button id="newArtistBtn" class="secondary">New Artist</button>
@@ -206,39 +242,192 @@
 </div>
 
 <script>
-// ─── Artist list ──────────────────────────────────────────────
+// ─── Artist list (with festival schedule) ────────────────────
+// Each artist: { name, dayLabels[], stages[], times[] }
+// Empty times[] = no schedule data (Kōya); multi-slot artists have aligned arrays.
 const ARTISTS = [
-  "Gorillaz","Jennie","The Cure","Zara Larsson","Addison Rae","Aphaca","Bad Gyal","Clipse",
-  "David Byrne","EsDeeKid","Ethel Cain","Ken Carson","Kneecap","Lily Allen","Little Simz",
-  "Tessa","Tobias Rahim","TV-2","Wolf Alice","Yung Lean & Bladee","Audrey Nuna","BB Trickz",
-  "BIA","Brutalismus 3000","Cobrah","DBN Gogo","Guldimund","Igorrr","Jade","JALEN NGONDA",
-  "Jane Remover","Jim Legxacy","Kettama","KWN","Liniker","Lojay","Los Mirlos","Los Thuthanaka",
-  "Lykke Li","Malk De Koijn","Marwan Moussa","MAS","Mille","Napalm Death","Oklou","Pa Salieu",
-  "PANDA BEAR & SONIC BOOM","Pil","Rizwan-Muazzam Qawwali","Rochelle Jordan","Royel Otis",
-  "Sama' Abdulhadi","Sammy Virji","Sierra Ferrell","Smerz","The Savage Rose",
-  "Uncle Acid & The Deadbeats","YOUNG MIKO","¥ØU$UK€ ¥UK1MAT$U","Zar Paulo","1111",
-  "Abdullah Miniawy Trio","Adrian Quesada","Albertslund Terror Korps","ANGÅENDE MIG",
-  "Annie & the Caldwells","Ata Kak","AySay","BLAWAN","Bruno Berle","Cat Clyde","Chezile",
-  "Cortisa Star","CRRDR","CUIRASS","Dean Johnson","Djrum","Dying Wish","Ecca Vandal",
-  "EEE GEE","Ela Lung","Folk Bitch Trio","Frost Children","Getdown Services","Gwenifer Raymond",
-  "HEINALI & ANDRIANA-YAROSLAVA SAIENKO","Hemlocke Springs","Honningbarna","Hypnosis Therapy",
-  "Iglooghost","Indus","Jorjiana","Joshua Idehen","Khana Bierbood","Kin'Gongolo Kiniata",
-  "Krøyer","Lamisi","LECHUGA ZAFIRO & VERRACO","Lord Snow","Luisa Almaguer","Madra Salach",
-  "Mark William Lewis","Maruja","Milkweed","Naïka","Nick León","No Joy","Nourished By Time",
-  "PILI PILI GIRLS","POISON RUÏN","Primitive Man","Sara Parkman","Sherelle",
-  "Shovel Dance Collective","ŠIROM","SMAG PÅ DIG SELV","Smertegrænsens Toldere","Snuggle",
-  "SOLI CITY x VERTIGO","Sorry","SUSOBRINO","Saad Tiouly","TARRAK","The Callous Daoboys",
-  "The New Eves","The Sophs","The Zawose Queens","Tonser","Truck Violence","Tuvaband","Uld",
-  "Vanessa Amara","Vgtbl.pl","Vilde Tuv","Wicky","Yerai Cortés","100%Wet","A Good Year",
-  "ALAWARI","Alice Ai","Ana Juél","Augusta Schackinger","Berg","Carlina de Place","Club Live",
-  "Demersal","Diket","Dork","Døtre","Eros For You","Fauna","GB","Glayden","Grande Mahogany",
-  "Ida Duelund","Karoline Mousing","Kayak","Kōya","Mami Umami","Masiv","Miaw","Michael Williams",
-  "Morild","Muskila + Simona Abdallah","Oskar Witt","Ozzy","Pistol Pistol Pistol","Ponny",
-  "Portal Pets","Pumpegris","Sa_G","Salver","SCAM","Smøgmænd","Spawner","Will","Zuloo"
+  { name: "Gorillaz", dayLabels: ["Thu 3/7"], stages: ["Orange Scene"], times: ["22.00"] },
+  { name: "Jennie", dayLabels: ["Fri 4/7"], stages: ["Orange Scene"], times: ["22.00"] },
+  { name: "The Cure", dayLabels: ["Wed 2/7"], stages: ["Orange Scene"], times: ["22.00"] },
+  { name: "Zara Larsson", dayLabels: ["Sat 5/7"], stages: ["Orange Scene"], times: ["23.15"] },
+  { name: "Addison Rae", dayLabels: ["Fri 4/7"], stages: ["Orange Scene"], times: ["19.00"] },
+  { name: "Aphaca", dayLabels: ["Fri 4/7"], stages: ["Orange Scene"], times: ["01.00"] },
+  { name: "Bad Gyal", dayLabels: ["Sat 5/7"], stages: ["Arena"], times: ["21.45"] },
+  { name: "Clipse", dayLabels: ["Sat 5/7"], stages: ["Orange Scene"], times: ["18.30"] },
+  { name: "David Byrne", dayLabels: ["Fri 4/7"], stages: ["Arena"], times: ["20.30"] },
+  { name: "EsDeeKid", dayLabels: ["Wed 2/7"], stages: ["Arena"], times: ["00.00"] },
+  { name: "Ethel Cain", dayLabels: ["Thu 3/7"], stages: ["Arena"], times: ["19.00"] },
+  { name: "Ken Carson", dayLabels: ["Thu 3/7"], stages: ["Arena"], times: ["21.00"] },
+  { name: "Kneecap", dayLabels: ["Thu 3/7"], stages: ["Arena"], times: ["00.00"] },
+  { name: "Lily Allen", dayLabels: ["Sat 5/7"], stages: ["Orange Scene"], times: ["20.45"] },
+  { name: "Little Simz", dayLabels: ["Thu 3/7"], stages: ["Orange Scene"], times: ["18.00"] },
+  { name: "Tessa", dayLabels: ["Fri 4/7"], stages: ["Orange Scene"], times: ["16.00"] },
+  { name: "Tobias Rahim", dayLabels: ["Thu 3/7"], stages: ["Orange Scene"], times: ["01.00"] },
+  { name: "TV-2", dayLabels: ["Sat 5/7"], stages: ["Orange Scene"], times: ["15.30"] },
+  { name: "Wolf Alice", dayLabels: ["Wed 2/7"], stages: ["Orange Scene"], times: ["19.30"] },
+  { name: "Yung Lean & Bladee", dayLabels: ["Fri 4/7"], stages: ["Arena"], times: ["00.15"] },
+  { name: "Audrey Nuna", dayLabels: ["Sat 5/7"], stages: ["Arena"], times: ["17.15"] },
+  { name: "BB Trickz", dayLabels: ["Thu 3/7"], stages: ["Lagune"], times: ["16.30"] },
+  { name: "BIA", dayLabels: ["Wed 2/7"], stages: ["Eos"], times: ["17.00"] },
+  { name: "Brutalismus 3000", dayLabels: ["Thu 3/7"], stages: ["Arena"], times: ["02.00"] },
+  { name: "Cobrah", dayLabels: ["Thu 3/7"], stages: ["Lagune"], times: ["00.15"] },
+  { name: "DBN Gogo", dayLabels: ["Fri 4/7"], stages: ["Eos"], times: ["20.30"] },
+  { name: "Guldimund", dayLabels: ["Thu 3/7"], stages: ["Arena"], times: ["14.30"] },
+  { name: "Igorrr", dayLabels: ["Sat 5/7"], stages: ["Lagune"], times: ["19.30"] },
+  { name: "Jade", dayLabels: ["Wed 2/7"], stages: ["Arena"], times: ["20.45"] },
+  { name: "JALEN NGONDA", dayLabels: ["Thu 3/7"], stages: ["Eos"], times: ["15.00"] },
+  { name: "Jane Remover", dayLabels: ["Sat 5/7"], stages: ["Lagune"], times: ["22.00"] },
+  { name: "Jim Legxacy", dayLabels: ["Fri 4/7"], stages: ["Lagune"], times: ["20.00"] },
+  { name: "Kettama", dayLabels: ["Sat 5/7"], stages: ["Eos"], times: ["02.00"] },
+  { name: "KWN", dayLabels: ["Thu 3/7"], stages: ["Eos"], times: ["21.00"] },
+  { name: "Liniker", dayLabels: ["Sat 5/7"], stages: ["Arena"], times: ["19.30"] },
+  { name: "Lojay", dayLabels: ["Sat 5/7"], stages: ["Eos"], times: ["14.00"] },
+  { name: "Los Mirlos", dayLabels: ["Sat 5/7"], stages: ["Eos"], times: ["17.00"] },
+  { name: "Los Thuthanaka", dayLabels: ["Fri 4/7"], stages: ["Lagune"], times: ["22.00"] },
+  { name: "Lykke Li", dayLabels: ["Thu 3/7"], stages: ["Eos"], times: ["23.30"] },
+  { name: "Malk De Koijn", dayLabels: ["Thu 3/7"], stages: ["Orange Scene"], times: ["16.00"] },
+  { name: "Marwan Moussa", dayLabels: ["Wed 2/7"], stages: ["Lagune"], times: ["22.30"] },
+  { name: "MAS", dayLabels: ["Sat 5/7"], stages: ["Arena"], times: ["14.30"] },
+  { name: "Mille", dayLabels: ["Fri 4/7"], stages: ["Arena"], times: ["13.00"] },
+  { name: "Napalm Death", dayLabels: ["Thu 3/7"], stages: ["Eos"], times: ["17.00"] },
+  { name: "Oklou", dayLabels: ["Fri 4/7"], stages: ["Eos"], times: ["23.00"] },
+  { name: "Pa Salieu", dayLabels: ["Wed 2/7"], stages: ["Arena"], times: ["18.30"] },
+  { name: "PANDA BEAR & SONIC BOOM", dayLabels: ["Sat 5/7"], stages: ["Eos"], times: ["22.00"] },
+  { name: "Pil", dayLabels: ["Wed 2/7"], stages: ["Orange Scene"], times: ["17.30"] },
+  { name: "Rizwan-Muazzam Qawwali", dayLabels: ["Fri 4/7"], stages: ["Eos"], times: ["18.00"] },
+  { name: "Rochelle Jordan", dayLabels: ["Sat 5/7"], stages: ["Lagune"], times: ["00.00"] },
+  { name: "Royel Otis", dayLabels: ["Thu 3/7"], stages: ["Arena"], times: ["17.00"] },
+  { name: "Sama' Abdulhadi", dayLabels: ["Wed 2/7"], stages: ["Eos"], times: ["20.30"] },
+  { name: "Sammy Virji", dayLabels: ["Fri 4/7"], stages: ["Arena"], times: ["02.30"] },
+  { name: "Sierra Ferrell", dayLabels: ["Fri 4/7"], stages: ["Arena"], times: ["17.30"] },
+  { name: "Smerz", dayLabels: ["Fri 4/7"], stages: ["Lagune"], times: ["18.00"] },
+  { name: "The Savage Rose", dayLabels: ["Fri 4/7"], stages: ["Eos"], times: ["15.00"] },
+  { name: "Uncle Acid & The Deadbeats", dayLabels: ["Thu 3/7"], stages: ["Lagune"], times: ["22.15"] },
+  { name: "YOUNG MIKO", dayLabels: ["Fri 4/7"], stages: ["Arena"], times: ["15.00"] },
+  { name: "¥ØU$UK€ ¥UK1MAT$U", dayLabels: ["Wed 2/7"], stages: ["Eos"], times: ["01.30"] },
+  { name: "Zar Paulo", dayLabels: ["Sat 5/7"], stages: ["Arena"], times: ["00.45"] },
+  { name: "1111", dayLabels: ["Sat 5/7"], stages: ["Gloria"], times: ["20.30"] },
+  { name: "Abdullah Miniawy Trio", dayLabels: ["Thu 3/7"], stages: ["Gloria"], times: ["16.30"] },
+  { name: "Adrian Quesada", dayLabels: ["Thu 3/7"], stages: ["Eos"], times: ["13.00"] },
+  { name: "Albertslund Terror Korps", dayLabels: ["Sat 5/7"], stages: ["Fauna"], times: ["21.00"] },
+  { name: "ANGÅENDE MIG", dayLabels: ["Wed 2/7"], stages: ["Lagune"], times: ["20.30"] },
+  { name: "Annie & the Caldwells", dayLabels: ["Wed 2/7"], stages: ["Lagune"], times: ["18.30"] },
+  { name: "Ata Kak", dayLabels: ["Sat 5/7"], stages: ["Gloria"], times: ["22.30"] },
+  { name: "AySay", dayLabels: ["Fri 4/7"], stages: ["Eos"], times: ["12.00"] },
+  { name: "BLAWAN", dayLabels: ["Fri 4/7"], stages: ["Lagune"], times: ["00.00"] },
+  { name: "Bruno Berle", dayLabels: ["Sat 5/7"], stages: ["Gloria"], times: ["18.30"] },
+  { name: "Cat Clyde", dayLabels: ["Fri 4/7"], stages: ["Fauna"], times: ["13.00"] },
+  { name: "Chezile", dayLabels: ["Fri 4/7"], stages: ["Lagune"], times: ["14.00"] },
+  { name: "Cortisa Star", dayLabels: ["Thu 3/7"], stages: ["Gloria"], times: ["20.30"] },
+  { name: "CRRDR", dayLabels: ["Sat 5/7"], stages: ["Fauna"], times: ["01.15"] },
+  { name: "CUIRASS", dayLabels: ["Sat 5/7"], stages: ["Gloria"], times: ["16.30"] },
+  { name: "Dean Johnson", dayLabels: ["Thu 3/7"], stages: ["Fauna"], times: ["13.00"] },
+  { name: "Djrum", dayLabels: ["Thu 3/7"], stages: ["Gloria"], times: ["01.45"] },
+  { name: "Dying Wish", dayLabels: ["Wed 2/7"], stages: ["Gloria"], times: ["23.30"] },
+  { name: "Ecca Vandal", dayLabels: ["Thu 3/7"], stages: ["Lagune"], times: ["18.30"] },
+  { name: "EEE GEE", dayLabels: ["Sat 5/7"], stages: ["Lagune"], times: ["14.30"] },
+  { name: "Ela Lung", dayLabels: ["Sat 5/7"], stages: ["Platform"], times: ["17.00"] },
+  { name: "Folk Bitch Trio", dayLabels: ["Fri 4/7"], stages: ["Fauna"], times: ["15.00"] },
+  { name: "Frost Children", dayLabels: ["Sat 5/7"], stages: ["Eos"], times: ["19.45"] },
+  { name: "Getdown Services", dayLabels: ["Fri 4/7"], stages: ["Lagune"], times: ["16.00"] },
+  { name: "Gwenifer Raymond", dayLabels: ["Fri 4/7"], stages: ["Gloria"], times: ["14.30"] },
+  { name: "HEINALI & ANDRIANA-YAROSLAVA SAIENKO", dayLabels: ["Sat 5/7"], stages: ["Gloria"], times: ["14.30"] },
+  { name: "Hemlocke Springs", dayLabels: ["Fri 4/7"], stages: ["Lagune"], times: ["12.00"] },
+  { name: "Honningbarna", dayLabels: ["Thu 3/7"], stages: ["Lagune"], times: ["02.15"] },
+  { name: "Hypnosis Therapy", dayLabels: ["Wed 2/7"], stages: ["Gloria"], times: ["19.30"] },
+  { name: "Iglooghost", dayLabels: ["Fri 4/7"], stages: ["Fauna"], times: ["01.00"] },
+  { name: "Indus", dayLabels: ["Wed 2/7"], stages: ["Gloria"], times: ["21.30"] },
+  { name: "Jorjiana", dayLabels: ["Sat 5/7"], stages: ["Fauna"], times: ["16.30"] },
+  { name: "Joshua Idehen", dayLabels: ["Wed 2/7"], stages: ["Gloria"], times: ["17.30"] },
+  { name: "Khana Bierbood", dayLabels: ["Thu 3/7"], stages: ["Fauna"], times: ["21.00"] },
+  { name: "Kin'Gongolo Kiniata", dayLabels: ["Fri 4/7"], stages: ["Fauna"], times: ["23.00"] },
+  { name: "Krøyer", dayLabels: ["Thu 3/7"], stages: ["Gloria"], times: ["22.15"] },
+  { name: "Lamisi", dayLabels: ["Fri 4/7"], stages: ["Fauna"], times: ["21.00"] },
+  { name: "LECHUGA ZAFIRO & VERRACO", dayLabels: ["Fri 4/7"], stages: ["Gloria"], times: ["02.00"] },
+  { name: "Lord Snow", dayLabels: ["Sat 5/7"], stages: ["Gloria"], times: ["00.30"] },
+  { name: "Luisa Almaguer", dayLabels: ["Fri 4/7"], stages: ["Gloria"], times: ["18.30"] },
+  { name: "Madra Salach", dayLabels: ["Sat 5/7"], stages: ["Gloria"], times: ["12.30"] },
+  { name: "Mark William Lewis", dayLabels: ["Fri 4/7"], stages: ["Gloria"], times: ["22.30"] },
+  { name: "Maruja", dayLabels: ["Fri 4/7"], stages: ["Fauna"], times: ["17.00"] },
+  { name: "Milkweed", dayLabels: ["Fri 4/7"], stages: ["Gloria"], times: ["16.30"] },
+  { name: "Naïka", dayLabels: ["Thu 3/7"], stages: ["Lagune"], times: ["20.15"] },
+  { name: "Nick León", dayLabels: ["Thu 3/7"], stages: ["Fauna"], times: ["23.00"] },
+  { name: "No Joy", dayLabels: ["Fri 4/7"], stages: ["Gloria"], times: ["20.30"] },
+  { name: "Nourished By Time", dayLabels: ["Sat 5/7"], stages: ["Lagune"], times: ["17.00"] },
+  { name: "PILI PILI GIRLS", dayLabels: ["Wed 2/7"], stages: ["Platform"], times: ["00.45"] },
+  { name: "POISON RUÏN", dayLabels: ["Fri 4/7"], stages: ["Gloria"], times: ["00.30"] },
+  { name: "Primitive Man", dayLabels: ["Wed 2/7"], stages: ["Lagune"], times: ["00.30"] },
+  { name: "Sara Parkman", dayLabels: ["Sat 5/7"], stages: ["Fauna"], times: ["14.30"] },
+  { name: "Sherelle", dayLabels: ["Wed 2/7"], stages: ["Fauna"], times: ["00.00"] },
+  { name: "Shovel Dance Collective", dayLabels: ["Fri 4/7", "Thu 3/7"], stages: ["Platform"], times: ["13.30", "19.00"] },
+  { name: "ŠIROM", dayLabels: ["Thu 3/7"], stages: ["Fauna"], times: ["15.00"] },
+  { name: "SMAG PÅ DIG SELV", dayLabels: ["Wed 2/7"], stages: ["Eos"], times: ["23.30"] },
+  { name: "Smertegrænsens Toldere", dayLabels: ["Wed 2/7"], stages: ["Fauna"], times: ["19.30"] },
+  { name: "Snuggle", dayLabels: ["Sat 5/7"], stages: ["Lagune"], times: ["12.00"] },
+  { name: "SOLI CITY x VERTIGO", dayLabels: ["Thu 3/7"], stages: ["Gloria"], times: ["13.00"] },
+  { name: "Sorry", dayLabels: ["Sat 5/7"], stages: ["Fauna"], times: ["23.15"] },
+  { name: "SUSOBRINO", dayLabels: ["Sat 5/7"], stages: ["Platform"], times: ["19.45"] },
+  { name: "Saad Tiouly", dayLabels: ["Fri 4/7"], stages: ["Fauna"], times: ["19.00"] },
+  { name: "TARRAK", dayLabels: ["Thu 3/7"], stages: ["Lagune"], times: ["14.00"] },
+  { name: "The Callous Daoboys", dayLabels: ["Sat 5/7"], stages: ["Fauna"], times: ["18.15"] },
+  { name: "The New Eves", dayLabels: ["Thu 3/7"], stages: ["Gloria"], times: ["18.30"] },
+  { name: "The Sophs", dayLabels: ["Wed 2/7"], stages: ["Fauna"], times: ["21.00"] },
+  { name: "The Zawose Queens", dayLabels: ["Thu 3/7"], stages: ["Gloria"], times: ["00.00"] },
+  { name: "Tonser", dayLabels: ["Fri 4/7"], stages: ["Lagune"], times: ["02.15"] },
+  { name: "Truck Violence", dayLabels: ["Thu 3/7"], stages: ["Fauna"], times: ["19.30"] },
+  { name: "Tuvaband", dayLabels: ["Wed 2/7"], stages: ["Fauna"], times: ["17.45"] },
+  { name: "Uld", dayLabels: ["Thu 3/7"], stages: ["Lagune"], times: ["12.00"] },
+  { name: "Vanessa Amara", dayLabels: ["Fri 4/7"], stages: ["Gloria"], times: ["12.30"] },
+  { name: "Vgtbl.pl", dayLabels: ["Thu 3/7"], stages: ["Fauna"], times: ["01.00"] },
+  { name: "Vilde Tuv", dayLabels: ["Thu 3/7"], stages: ["Platform"], times: ["12.00"] },
+  { name: "Wicky", dayLabels: ["Thu 3/7"], stages: ["Eos"], times: ["19.00"] },
+  { name: "Yerai Cortés", dayLabels: ["Thu 3/7"], stages: ["Fauna"], times: ["17.00"] },
+  { name: "100%Wet", dayLabels: ["Mon 30/6"], stages: ["Lagune"], times: ["18.15"] },
+  { name: "A Good Year", dayLabels: ["Mon 30/6"], stages: ["Lagune"], times: ["21.15"] },
+  { name: "ALAWARI", dayLabels: ["Tue 1/7"], stages: ["Eos"], times: ["15.45"] },
+  { name: "Alice Ai", dayLabels: ["Mon 30/6"], stages: ["Eos"], times: ["22.15"] },
+  { name: "Ana Juél", dayLabels: ["Sun 29/6"], stages: ["Eos"], times: ["17.30"] },
+  { name: "Augusta Schackinger", dayLabels: ["Tue 1/7"], stages: ["Eos"], times: ["14.15"] },
+  { name: "Berg", dayLabels: ["Tue 1/7"], stages: ["Eos"], times: ["19.00"] },
+  { name: "Carlina de Place", dayLabels: ["Sun 29/6"], stages: ["Eos"], times: ["15.45"] },
+  { name: "Club Live", dayLabels: ["Sun 29/6"], stages: ["Lagune"], times: ["23.00"] },
+  { name: "Demersal", dayLabels: ["Mon 30/6"], stages: ["Eos"], times: ["19.00"] },
+  { name: "Diket", dayLabels: ["Tue 1/7"], stages: ["Lagune"], times: ["13.30"] },
+  { name: "Dork", dayLabels: ["Mon 30/6"], stages: ["Lagune"], times: ["13.30"] },
+  { name: "Døtre", dayLabels: ["Mon 30/6"], stages: ["Lagune"], times: ["15.00"] },
+  { name: "Eros For You", dayLabels: ["Tue 1/7"], stages: ["Eos"], times: ["20.30"] },
+  { name: "Fauna", dayLabels: ["Tue 1/7"], stages: ["Lagune"], times: ["18.15"] },
+  { name: "GB", dayLabels: ["Mon 30/6"], stages: ["Lagune"], times: ["19.45"] },
+  { name: "Glayden", dayLabels: ["Tue 1/7"], stages: ["Eos"], times: ["23.45"] },
+  { name: "Grande Mahogany", dayLabels: ["Sun 29/6"], stages: ["Eos"], times: ["19.00"] },
+  { name: "Ida Duelund", dayLabels: ["Mon 30/6"], stages: ["Lagune"], times: ["16.30"] },
+  { name: "Karoline Mousing", dayLabels: ["Mon 30/6"], stages: ["Eos"], times: ["15.45"] },
+  { name: "Kayak", dayLabels: ["Mon 30/6"], stages: ["Eos"], times: ["14.15"] },
+  { name: "Kōya", dayLabels: [], stages: [], times: [] },
+  { name: "Mami Umami", dayLabels: ["Tue 1/7"], stages: ["Lagune"], times: ["21.15"] },
+  { name: "Masiv", dayLabels: ["Mon 30/6"], stages: ["Eos"], times: ["23.45"] },
+  { name: "Miaw", dayLabels: ["Sun 29/6"], stages: ["Eos"], times: ["23.45"] },
+  { name: "Michael Williams", dayLabels: ["Mon 30/6"], stages: ["Eos"], times: ["20.30"] },
+  { name: "Morild", dayLabels: ["Mon 30/6"], stages: ["Lagune"], times: ["23.00"] },
+  { name: "Muskila + Simona Abdallah", dayLabels: ["Tue 1/7"], stages: ["Lagune"], times: ["23.00"] },
+  { name: "Oskar Witt", dayLabels: ["Sun 29/6"], stages: ["Lagune"], times: ["18.15"] },
+  { name: "Ozzy", dayLabels: ["Sun 29/6"], stages: ["Eos"], times: ["14.15"] },
+  { name: "Pistol Pistol Pistol", dayLabels: ["Tue 1/7"], stages: ["Lagune"], times: ["16.30"] },
+  { name: "Ponny", dayLabels: ["Sun 29/6"], stages: ["Lagune"], times: ["15.00"] },
+  { name: "Portal Pets", dayLabels: ["Sun 29/6"], stages: ["Lagune"], times: ["16.30"] },
+  { name: "Pumpegris", dayLabels: ["Tue 1/7"], stages: ["Lagune"], times: ["15.00"] },
+  { name: "Sa_G", dayLabels: ["Mon 30/6"], stages: ["Eos"], times: ["17.30"] },
+  { name: "Salver", dayLabels: ["Tue 1/7"], stages: ["Lagune"], times: ["19.45"] },
+  { name: "SCAM", dayLabels: ["Sun 29/6"], stages: ["Lagune"], times: ["21.15"] },
+  { name: "Smøgmænd", dayLabels: ["Sun 29/6"], stages: ["Eos"], times: ["22.15"] },
+  { name: "Spawner", dayLabels: ["Sun 29/6"], stages: ["Lagune"], times: ["19.45"] },
+  { name: "Will", dayLabels: ["Tue 1/7"], stages: ["Eos"], times: ["17.30"] },
+  { name: "Zuloo", dayLabels: ["Tue 1/7"], stages: ["Eos"], times: ["22.15"] }
 ];
 
 // ─── Game state ───────────────────────────────────────────────
 let target = "";
+let currentArtistData = null;
 let currentGuess = "";
 let currentRow = 0;
 let gameOver = false;
@@ -575,6 +764,42 @@ function showOverlay(won) {
   document.getElementById('resultTitle').style.color = won ? '#538d4e' : '#f64740';
   document.getElementById('resultArtist').textContent = target;
 
+  // Schedule info
+  const scheduleLine = document.getElementById('scheduleLine');
+  const ad = currentArtistData;
+  if (ad && ad.times && ad.times.length > 0) {
+    const parts = [];
+    for (let i = 0; i < ad.times.length; i++) {
+      const day = ad.dayLabels[i] || ad.dayLabels[0] || '';
+      const stage = ad.stages[i] || ad.stages[0] || '';
+      const time = ad.times[i];
+      parts.push(`🎤 ${stage}<span class="sep">·</span>${day}<span class="sep">·</span>${time}`);
+    }
+    scheduleLine.innerHTML = parts.join('<br>');
+    scheduleLine.style.display = '';
+  } else {
+    scheduleLine.style.display = 'none';
+  }
+
+  // Spotify link
+  const spotifyBtn = document.getElementById('spotifyBtn');
+  const searchQuery = encodeURIComponent(target);
+  spotifyBtn.href = `https://open.spotify.com/search/${searchQuery}`;
+  spotifyBtn.style.display = 'inline-flex';
+
+  // Update info bar above board
+  const infoBar = document.getElementById('scheduleInfo');
+  if (ad && ad.times && ad.times.length > 0) {
+    const firstStage = ad.stages[0] || '';
+    const firstDay = ad.dayLabels[0] || '';
+    const firstTime = ad.times[0] || '';
+    infoBar.innerHTML = `🎤 <span class="stage-tag">${firstStage}</span> <span class="sep">·</span> <span class="day-tag">${firstDay}</span> <span class="sep">·</span> <span class="time-tag">${firstTime}</span>`;
+    infoBar.className = 'show';
+  } else {
+    infoBar.textContent = target;
+    infoBar.className = 'show';
+  }
+
   const hasGuessable = slots.some(s => s.elementType === 'guessable');
   document.getElementById('noLettersNote').textContent = hasGuessable ? '' : 'No letters to guess — all tiles auto-revealed!';
 }
@@ -619,7 +844,8 @@ function newGame(sameArtist) {
     currentArtistIdx = Math.floor(Math.random() * ARTISTS.length);
   }
 
-  target = ARTISTS[currentArtistIdx];
+  target = ARTISTS[currentArtistIdx].name;
+  currentArtistData = ARTISTS[currentArtistIdx];
   slots = prepareSlots(target);
 
   const guessableCount = slots.filter(s => s.elementType === 'guessable').length;
@@ -640,6 +866,9 @@ function newGame(sameArtist) {
   renderKeyboard();
   updateStats();
   document.getElementById('msg').innerHTML = '&nbsp;';
+  // Reset schedule info
+  document.getElementById('scheduleInfo').textContent = 'Guess the artist to reveal their set info';
+  document.getElementById('scheduleInfo').className = '';
 }
 
 // ─── Physical keyboard ───────────────────────────────────────
